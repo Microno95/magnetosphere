@@ -131,47 +131,53 @@ class gorgon_sim:
                zlim=[self.z[0], self.z[-1]])
         ax.set_aspect(1)
 
-def write_vti_scalar(sim, arr, x=sim.x, y=sim.y, z=sim.z, name=None, output_dir=''):
-    ''' 
-    Writes a 3D numpy array into a VTI file. Only works for scalar values. Must be uniform spacing.
-    arr: the data you want to write.
-        If str: writes from sim.arr
-        If numpy array: writes the numpy array. Assumes the same size as sim unless x, y and z are specified
-        If dict: writes multiple numpy arrays in dict to vti. Assumes the same size as sim unless x, y and z are specified
-    x, y, z: the x, y and z position array,
-    name: Name of the file/data array. Needed for np.array or dict arr input
-    output_dir: Specify a different output folder.    
-    '''
-    from evtk.hl import imageToVTK 
-    if(output_dir is not ''):
-        output_dir += '/'
-    print(output_dir)
-    
-    # If x, y, and z are different from the array
-    xc = np.array([x[0], y[0], z[0]])
-    d = np.array([x[1]-x[0], y[1]-y[0], z[1]-z[0]])
-    
-    if(type(arr) is type('')):        
-        imageToVTK(output_dir+sim.index+'_'+arr,
-                   cellData={arr: sim.arr[arr]},
-                   origin=xc.tolist(), spacing=d.tolist())
+    def write_vti_scalar(self, arr, x=None, y=None, z=None, name=None, output_dir=''):
+        ''' 
+        Writes a 3D numpy array into a VTI file. Only works for scalar values. Must be uniform spacing.
+        arr: the data you want to write.
+            If str: writes from sim.arr
+            If numpy array: writes the numpy array. Assumes the same size as sim unless x, y and z are specified
+            If dict: writes multiple numpy arrays in dict to vti. Assumes the same size as sim unless x, y and z are specified
+        x, y, z: the x, y and z position array,
+        name: Name of the file/data array. Needed for np.array or dict arr input
+        output_dir: Specify a different output folder.    
+        '''
+        from evtk.hl import imageToVTK 
+        if(output_dir is not ''):
+            output_dir += '/'
         
-    else:
-        if name is None:
-            print('For arr of type np.array or dict, you need to specify a name')
-            return
+        if(x is None):
+            x = self.x
+            y = self.y
+            z = self.z
         
-        if type(arr) is type(dict()):
-            imageToVTK(output_dir+sim.index+'_'+name,
-                       cellData=arr,
-                       origin=xc.tolist(), spacing=d.tolist())
+        # If x, y, and z are different from the array
+        d = np.array([x[1]-x[0], y[1]-y[0], z[1]-z[0]])
+        xc = np.array([x[0], y[0], z[0]]) #-0.5*d
         
-        elif type(arr) is type(np.array([])):
-            print(arr.shape)
-            imageToVTK(output_dir+sim.index+'_'+name,
-                       cellData={name: arr},
+        if(type(arr) is type('')):        
+            imageToVTK(output_dir+self.index+'_'+arr+'-'+self.time,
+                       cellData={arr: self.arr[arr]},
                        origin=xc.tolist(), spacing=d.tolist())
             
         else:
-            print('arr must be of type str, np.array or dict')
+            if name is None:
+                print('For arr of type np.array or dict, you need to specify a name')
+                return
+            
+            fname = output_dir+self.index+'_'+name+'-'+self.time
+            
+            if type(arr) is type(dict()):
+                imageToVTK(fname,
+                           cellData=arr,
+                           origin=xc.tolist(), spacing=d.tolist())
+            
+            elif type(arr) is type(np.array([])):
+                print(arr.shape)
+                imageToVTK(fname,
+                           cellData={name: arr},
+                           origin=xc.tolist(), spacing=d.tolist())
+                
+            else:
+                print('arr must be of type str, np.array or dict')
             
