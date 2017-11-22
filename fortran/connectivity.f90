@@ -1,38 +1,83 @@
     module connectivity_tracer
     use omp_lib
     implicit none
+    
+    ! Connectivity tracer!
+    
+    ! ROT: Reason of termination
+    ! If  ROT = 0: Still running
+    !     ROT = 1: Out of steps
+    !     ROT = 2: Out of domain
+    !     ROT = 3: In inner boundary: North
+    !     ROT = 4: In inner boundary: South
+    !     ROT = -1: vmag = 0
+    !     ROT = -2: NaN present
+    ! Link: Connectivity in MS
+    ! If  Link = 0: SW
+    ! If  Link = 1: Closed
+    ! If  Link = 2: North Open
+    ! If  Link = 3: South Open
 	
     contains
     
-    subroutine streamline_array(x0, nlines, v, nx, ny, nz, d, xc, dir, xf, ns, ds, ROT, ns_out)
+    subroutine streamline_array(x0, nlines, v, nx, ny, nz, d, xc, link, ns, ds)
     double precision, dimension(nlines,3), intent(in) :: x0
     double precision, dimension(3), intent(in) :: d, xc
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
-    double precision, dimension(nlines, 3), intent(out) :: xf
-    integer, intent(in) :: nx, ny, nz, ns, dir, nlines
+    integer, dimension(nlines), intent(out) :: link
+    integer, intent(in) :: nx, ny, nz, ns, nlines
     double precision, intent(in) :: ds
-    integer, intent(out), dimension(nlines) :: ROT, ns_out
+    integer :: ROT_f, ROT_r
     integer :: i
-	
-	!$omp parallel do default(firstprivate) shared(v, x0, xf, ns_out, ROT) schedule(dynamic)
+    
+    !$omp parallel do default(firstprivate) shared(v, x0, link) schedule(dynamic)
     do i=1,nlines
-        call streamline(x0(i,:), v, nx, ny, nz, d, xc, dir, xf(i,:), ns, ds, ROT(i), ns_out(i))
+        ROT_f = streamline(x0(i,:), v, nx, ny, nz, d, xc, 1, ns, ds)
+        ROT_r = streamline(x0(i,:), v, nx, ny, nz, d, xc, -1, ns, ds)
+        link(i) = categorise_end_pts(ROT_f, ROT_r)
     end do
 	!$omp end parallel do
     
     end subroutine streamline_array
+    
+    integer function categorise_end_pts(f, r)
+    integer, intent(in) :: f, r
+    integer :: link
+    
+    if(f==2 .and. r==2) then
+        link = 1
+    elseif( (f==3 .or. f==4) .and. (r==3 .or. r==4) ) then
+        link = 2
+    elseif( (f==2 .and. r==3) .or. (f==3 .and. r==2) ) then
+        link = 3
+    elseif( (f==2 .and. r==4) .or. (f==4 .and. r==2) ) then
+        link = 4
+    elseif( f==2 .or. r==2) then
+        link = 5
+    elseif( f==3 .or. r==3) then
+        link = 6
+    elseif( f==4 .or. r==4) then
+        link = 7
+    else
+        link = -1
+    end if  
+            
+    categorise_end_pts = link
+    
+    end function categorise_end_pts
 
-    subroutine streamline(x0, v, nx, ny, nz, d, xc, dir, xi, ns, ds, ROT, ns_out)
+    integer function streamline(x0, v, nx, ny, nz, d, xc, dir, ns, ds)
     implicit none
     double precision, dimension(3), intent(in) :: x0, d, xc
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
-    double precision, dimension(3), intent(out) :: xi
+    double precision, dimension(3) :: xi
     integer, intent(in) :: nx, ny, nz, ns, dir
-    integer, intent(out) :: ns_out
     double precision, intent(in) :: ds
-    integer, intent(out) :: ROT
+    integer :: ROT
     double precision, dimension(3) :: k1, k2, k3, k4
     integer :: i
+    
+    ROT = 0
     
     xi = x0
 
@@ -64,16 +109,17 @@
         xi = xi + (k1 + 2*k2 + 2*k3 + k4)/6.
 
         if ( isnan(xi(1)).or.isnan(xi(2)).or.isnan(xi(3)) ) then
-            ROT = 3
+            ROT = -2
             exit
         end if
         
     end do
 
     if (ROT.eq.0) ROT = 1
-    ns_out = i
+    
+    streamline = ROT
 
-    end subroutine streamline
+    end function streamline
 
     subroutine stream_function(xI, v, nx, ny, nz, d, xc, dir, f, ROT)
     implicit none
@@ -89,19 +135,22 @@
     
     ri = sqrt(xI(1)**2 + xI(2)**2 + xI(3)**2)
     if(ri.lt.1.) then
-        ROT = 2
+        if(xI(3).ge.0) ROT = 3
+        if(xI(3).lt.0) ROT = 4
         return
-    end if      
+    end if
     
     call interpolate(xI, v, nx, ny, nz, d, xc, vI, ROT)
+    
+    if(ROT.ne.0) return
 	
 	vmag  = sqrt(vI(1)**2+vI(2)**2+vI(3)**2)
 	if(vmag.eq.0.) then
-		ROT = 3
-		f = (/0., 0., 0./)
+		ROT = -1
+		f = [0., 0., 0.]
 	else
 		f = dir*vI/vmag
-	end if
+    end if
 	
     end subroutine stream_function
     
