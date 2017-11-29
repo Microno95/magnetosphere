@@ -17,23 +17,25 @@
     ! If  Link = 1: Closed
     ! If  Link = 2: North Open
     ! If  Link = 3: South Open
+    
+    integer :: ns
+    double precision :: ds
 	
     contains
     
-    subroutine streamline_array(x0, nlines, v, nx, ny, nz, d, xc, link, ns, ds)
+    subroutine streamline_array(x0, nlines, v, nx, ny, nz, d, xc, link)
     double precision, dimension(nlines,3), intent(in) :: x0
     double precision, dimension(3), intent(in) :: d, xc
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
     integer, dimension(nlines), intent(out) :: link
-    integer, intent(in) :: nx, ny, nz, ns, nlines
-    double precision, intent(in) :: ds
+    integer, intent(in) :: nx, ny, nz, nlines
     integer :: ROT_f, ROT_r
     integer :: i
     
     !$omp parallel do default(firstprivate) shared(v, x0, link) schedule(dynamic)
     do i=1,nlines
-        ROT_f = streamline(x0(i,:), v, nx, ny, nz, d, xc, 1, ns, ds)
-        ROT_r = streamline(x0(i,:), v, nx, ny, nz, d, xc, -1, ns, ds)
+        ROT_f = streamline(x0(i,:), v, nx, ny, nz, d, xc, 1)
+        ROT_r = streamline(x0(i,:), v, nx, ny, nz, d, xc, -1)
         link(i) = categorise_end_pts(ROT_f, ROT_r)
     end do
 	!$omp end parallel do
@@ -66,13 +68,12 @@
     
     end function categorise_end_pts
 
-    integer function streamline(x0, v, nx, ny, nz, d, xc, dir, ns, ds)
+    integer function streamline(x0, v, nx, ny, nz, d, xc, dir)
     implicit none
     double precision, dimension(3), intent(in) :: x0, d, xc
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
     double precision, dimension(3) :: xi
-    integer, intent(in) :: nx, ny, nz, ns, dir
-    double precision, intent(in) :: ds
+    integer, intent(in) :: nx, ny, nz, dir
     integer :: ROT
     double precision, dimension(3) :: k1, k2, k3, k4
     integer :: i
