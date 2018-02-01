@@ -1,48 +1,102 @@
-    module streamtracer
+    module connectivity_tracer
     use omp_lib
     implicit none
+    
+    ! Connectivity tracer!
+    
+    ! ROT: Reason of termination
+    ! If  ROT = 0: Still running
+    !     ROT = 1: Out of steps
+    !     ROT = 2: Out of domain
+    !     ROT = 3: In inner boundary
+    !     ROT = -1: vmag = 0
+    !     ROT = -2: NaN present
+    ! Link: Connectivity in MS
+    ! If  Link = 1: SW
+    !     Link = 2: Closed
+    !     Link = 3: North Open
+    !     Link = 4: South Open
+    !     Link = 5: SW Inc
+    !     Link = 6: North Inc
+    !     Link = 7: South Inc
+    !     Link = 8: Inc Inc
+    
+    integer :: ns
+    double precision :: ds, r_IB=1.
+	logical :: inner_boundary=.false., write_threads=.false.
 	
     contains
     
-    subroutine streamline_array(x0, nlines, v, nx, ny, nz, d, xc, dir, xs, ns, ds, ROT, ns_out)
+    subroutine connectivity_array(x0, nlines, v, nx, ny, nz, d, xc, link)
     double precision, dimension(nlines,3), intent(in) :: x0
     double precision, dimension(3), intent(in) :: d, xc
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
-    double precision, dimension(nlines, 0:ns, 3), intent(out) :: xs
-    integer, intent(in) :: nx, ny, nz, ns, dir, nlines
-    double precision, intent(in) :: ds
-    integer, intent(out), dimension(nlines) :: ROT, ns_out
+    integer, dimension(nlines), intent(out) :: link
+    integer, intent(in) :: nx, ny, nz, nlines
+    integer :: ROT_f, ROT_r
     integer :: i
 	
-	open(unit=500, file='fortran_threads.txt')
-	write(500,*) omp_get_num_threads(), omp_get_max_threads()
-	close(500)
+	if(write_threads) then
+		!$omp parallel
+		!$omp critical
+		open(unit=500, file='streamtracer_threads.txt', access='append')
+		write(500,*) omp_get_thread_num(), omp_get_max_threads()
+		close(500)
+		!$omp end critical
+		!$omp end parallel
+	end if
     
-	!$omp parallel do default(shared) schedule(dynamic)
+    !$omp parallel do default(firstprivate) shared(v, x0, link) schedule(dynamic)
     do i=1,nlines
-        call streamline(x0(i,:), v, nx, ny, nz, d, xc, dir, xs(i,:,:), ns, ds, ROT(i), ns_out(i))
+        ROT_f = streamline(x0(i,:), v, nx, ny, nz, d, xc, 1)
+        ROT_r = streamline(x0(i,:), v, nx, ny, nz, d, xc, -1)
+        link(i) = categorise_end_pts(ROT_f, ROT_r)
     end do
 	!$omp end parallel do
     
-    end subroutine streamline_array
+    end subroutine connectivity_array
+    
+    integer function categorise_end_pts(f, r)
+    integer, intent(in) :: f, r
+    integer :: link
+    
+    if(r==2 .and. f==2) then
+		link = 1	! Solar Wind
+	elseif(r==3 .and. f==3) then
+		link = 2	! Closed
+	elseif(r==3 .and. f==2) then
+		link = 3	! North-Open
+	elseif(r==2 .and. f==3) then
+		link = 4	! South-Open
+	elseif(r==2 .or. f==2) then
+		link = 5	! SW-Inc
+	elseif(r==3) then
+		link = 6	! North-Inc
+	elseif(f==3) then
+		link = 7	! South-Inc
+	else
+		link = 8	! Inc-Inc
+    end if  
+            
+    categorise_end_pts = link
+    
+    end function categorise_end_pts
 
-    subroutine streamline(x0, v, nx, ny, nz, d, xc, dir, xs, ns, ds, ROT, ns_out)
+    integer function streamline(x0, v, nx, ny, nz, d, xc, dir)
     implicit none
     double precision, dimension(3), intent(in) :: x0, d, xc
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
-    double precision, dimension(0:ns, 3), intent(out) :: xs
-    integer, intent(in) :: nx, ny, nz, ns, dir
-    integer, intent(out) :: ns_out
-    double precision, intent(in) :: ds
-    integer, intent(out) :: ROT
-    double precision, dimension(3) :: xi, k1, k2, k3, k4
+    double precision, dimension(3) :: xi
+    integer, intent(in) :: nx, ny, nz, dir
+    integer :: ROT
+    double precision, dimension(3) :: k1, k2, k3, k4
     integer :: i
     
-    xs(0, :) = x0
+    ROT = 0
+    
+    xi = x0
 
     do i=0,ns-1
-        
-        xi = xs(i, :)
 
         !--- RK4 K parameters ---------------------------------------------------------------------
         call stream_function(xi,        v, nx, ny, nz, d, xc, dir, k1, ROT)
@@ -67,19 +121,20 @@
 
         !--- Step ---------------------------------------------------------------------------------
 
-        xs(i+1,:) = xi + (k1 + 2*k2 + 2*k3 + k4)/6.
+        xi = xi + (k1 + 2*k2 + 2*k3 + k4)/6.
 
         if ( isnan(xi(1)).or.isnan(xi(2)).or.isnan(xi(3)) ) then
-            ROT = 3
+            ROT = -2
             exit
         end if
         
     end do
 
     if (ROT.eq.0) ROT = 1
-    ns_out = i
+    
+    streamline = ROT
 
-    end subroutine streamline
+    end function streamline
 
     subroutine stream_function(xI, v, nx, ny, nz, d, xc, dir, f, ROT)
     implicit none
@@ -93,21 +148,25 @@
     double precision :: ri, vmag
     double precision, dimension(3) :: vI
     
-    ri = sqrt(xI(1)**2 + xI(2)**2 + xI(3)**2)
-    if(ri.lt.1.) then
-        ROT = 2
-        return
-    end if      
+	if(inner_boundary) then
+		ri = sqrt(xI(1)**2 + xI(2)**2 + xI(3)**2)
+		if(ri.lt.r_IB) then
+			ROT = 3
+			return
+		end if
+	end if
     
     call interpolate(xI, v, nx, ny, nz, d, xc, vI, ROT)
+    
+    if(ROT.ne.0) return
 	
 	vmag  = sqrt(vI(1)**2+vI(2)**2+vI(3)**2)
 	if(vmag.eq.0.) then
-		ROT = 3
-		f = (/0., 0., 0./)
+		ROT = -1
+		f = [0., 0., 0.]
 	else
 		f = dir*vI/vmag
-	end if
+    end if
 	
     end subroutine stream_function
     
@@ -184,4 +243,4 @@
     
     !--- RK4 streamline integrator and interpolation --------------------------------------------------
 
-    end module streamtracer
+    end module connectivity_tracer

@@ -173,7 +173,6 @@ class gorgon_sim:
                            origin=xc.tolist(), spacing=d.tolist())
             
             elif type(arr) is type(np.array([])):
-                print(arr.shape)
                 imageToVTK(fname,
                            cellData={name: arr},
                            origin=xc.tolist(), spacing=d.tolist())
