@@ -1,6 +1,11 @@
 
 # Created by https://www.gitignore.io/api/python
 
+# Custom
+*.vti
+*.pvti
+*.vtp
+
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
