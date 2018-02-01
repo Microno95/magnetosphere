@@ -8,22 +8,26 @@
     ! If  ROT = 0: Still running
     !     ROT = 1: Out of steps
     !     ROT = 2: Out of domain
-    !     ROT = 3: In inner boundary: North
-    !     ROT = 4: In inner boundary: South
+    !     ROT = 3: In inner boundary
     !     ROT = -1: vmag = 0
     !     ROT = -2: NaN present
     ! Link: Connectivity in MS
-    ! If  Link = 0: SW
-    ! If  Link = 1: Closed
-    ! If  Link = 2: North Open
-    ! If  Link = 3: South Open
+    ! If  Link = 1: SW
+    !     Link = 2: Closed
+    !     Link = 3: North Open
+    !     Link = 4: South Open
+    !     Link = 5: SW Inc
+    !     Link = 6: North Inc
+    !     Link = 7: South Inc
+    !     Link = 8: Inc Inc
     
     integer :: ns
-    double precision :: ds
+    double precision :: ds, r_IB=1.
+	logical :: inner_boundary=.false.
 	
     contains
     
-    subroutine streamline_array(x0, nlines, v, nx, ny, nz, d, xc, link)
+    subroutine connectivity_array(x0, nlines, v, nx, ny, nz, d, xc, link)
     double precision, dimension(nlines,3), intent(in) :: x0
     double precision, dimension(3), intent(in) :: d, xc
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
@@ -31,6 +35,14 @@
     integer, intent(in) :: nx, ny, nz, nlines
     integer :: ROT_f, ROT_r
     integer :: i
+	
+	!$omp parallel
+	!$omp critical
+	open(unit=500, file='connectivity_threads.txt', access='append')
+	write(500,*) omp_get_thread_num(), omp_get_max_threads()
+	close(500)
+	!$omp end critical
+	!$omp end parallel
     
     !$omp parallel do default(firstprivate) shared(v, x0, link) schedule(dynamic)
     do i=1,nlines
@@ -40,28 +52,28 @@
     end do
 	!$omp end parallel do
     
-    end subroutine streamline_array
+    end subroutine connectivity_array
     
     integer function categorise_end_pts(f, r)
     integer, intent(in) :: f, r
     integer :: link
     
-    if(f==2 .and. r==2) then
-        link = 1
-    elseif( (f==3 .or. f==4) .and. (r==3 .or. r==4) ) then
-        link = 2
-    elseif( (f==2 .and. r==3) .or. (f==3 .and. r==2) ) then
-        link = 3
-    elseif( (f==2 .and. r==4) .or. (f==4 .and. r==2) ) then
-        link = 4
-    elseif( f==2 .or. r==2) then
-        link = 5
-    elseif( f==3 .or. r==3) then
-        link = 6
-    elseif( f==4 .or. r==4) then
-        link = 7
-    else
-        link = -1
+    if(r==2 .and. f==2) then
+		link = 1	! Solar Wind
+	elseif(r==3 .and. f==3) then
+		link = 2	! Closed
+	elseif(r==3 .and. f==2) then
+		link = 3	! North-Open
+	elseif(r==2 .and. f==3) then
+		link = 4	! South-Open
+	elseif(r==2 .or. f==2) then
+		link = 5	! SW-Inc
+	elseif(r==3) then
+		link = 6	! North-Inc
+	elseif(f==3) then
+		link = 7	! South-Inc
+	else
+		link = 8	! Inc-Inc
     end if  
             
     categorise_end_pts = link
@@ -134,12 +146,13 @@
     double precision :: ri, vmag
     double precision, dimension(3) :: vI
     
-    ri = sqrt(xI(1)**2 + xI(2)**2 + xI(3)**2)
-    if(ri.lt.1.) then
-        if(xI(3).ge.0) ROT = 3
-        if(xI(3).lt.0) ROT = 4
-        return
-    end if
+	if(inner_boundary) then
+		ri = sqrt(xI(1)**2 + xI(2)**2 + xI(3)**2)
+		if(ri.lt.r_IB) then
+			ROT = 3
+			return
+		end if
+	end if
     
     call interpolate(xI, v, nx, ny, nz, d, xc, vI, ROT)
     

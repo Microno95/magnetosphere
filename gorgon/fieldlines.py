@@ -13,61 +13,35 @@ class fieldlines(streamline_array):
     def __init__(self, n_steps, step_size):
         
         streamline_array.__init__(self, n_steps, step_size, direction=0)
-		
-		
+        
+        
     
     def calc_linkage(self, sim):
         
-        def end_cat(xi, sim):
+        def end_cat(ROT):
             
+            f, r = ROT
             
-            ri = np.sqrt(np.sum(xi**2, axis=-1))
-            
-            i = 2
-            el_x = np.logical_or(xi[:, 0]<sim.x[i], xi[:, 0]>sim.x[-i])
-            el_y = np.logical_or(xi[:, 1]<sim.y[i], xi[:, 1]>sim.y[-i])
-            el_z = np.logical_or(xi[:, 2]<sim.z[i], xi[:, 2]>sim.z[-i])
-            
-            el_IB = ri<1.+sim.d[0]
-    
-            # Check to see if streamline has gone out of bounds
-            
-            el_bounds = np.vstack([el_x, el_y, el_z]).any(axis=0)
-            
-#            for s, f in zip(['x', 'y', 'z', 'IB', 'bounds'],
-#                            [el_x, el_y, el_z, el_IB, el_bounds]):
-#                print(s, f)
-            
-            # Check to see if streamline has gone to the inner boundary
-            
-            Closed = np.logical_and(el_IB[0], el_IB[1])
-            SW = np.logical_and(el_bounds[0], el_bounds[1])
-            Open = np.logical_xor(el_bounds[0], el_bounds[1])
-            
-#            for s, f in zip(['Closed', 'SW', 'Open'], [Closed, SW, Open]):
-#                print(s, f)
-            
-            if(Closed):
-                link = 1
-            elif(SW):
-                link = 2
-            elif(Open):
-                
-                i = np.argmin(ri)
-                if(xi[i, 2] > 0.):
-                    link = 3
-                elif(xi[i, 2] < 0.):
-                    link = 4
+            if(r==2 and f==2):
+                link = 1	# Solar Wind
+            elif(r==3 and f==3):
+                link = 2	# Closed
+            elif(r==3 and f==2):
+                link = 3	# North-Open
+            elif(r==2 and f==3):
+                link = 4	# South-Open
+            elif(r==2 or f==2):
+                link = 5	# SW-Inc
+            elif(r==3):
+                link = 6	# North-Inc
+            elif(f==3):
+                link = 7	# South-Inc
             else:
-                link = 0
+                link = 8	# Inc-Inc
         
             return link
         
-        # Place the end points into an array
-        x_ends = np.array([ [xi[0, :], xi[-1, :]] for xi in self.xs if xi.size>0])
-        
-        self.cell_data['link'] = np.array([end_cat(xi, sim) for xi in x_ends]) 
-#        self.link = end_cat(x_ends[0], sim) 
+        self.cell_data['link'] = np.array([end_cat(ROTi) for ROTi in self.ROT])
         
     def filter(self, i):
         self.xs = self.xs[i]

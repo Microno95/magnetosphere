@@ -13,7 +13,7 @@ class streamline:
         self.ds = step_size # Integration step size
         self.dir = direction # Integration direction of streamline
         
-        self.iROT = 0 # Reason of termination
+        self.ROT = 0 # Reason of termination
         
         self._ROT_reasons = ['Uncalculated',
                             'Out of steps',
@@ -36,10 +36,10 @@ class streamline:
             
     def __str__(self):
         
-        if(type(self.iROT) == type(int())):
-            ROT = self._ROT_reasons[self.iROT]
+        if(type(self.ROT) == type(int())):
+            ROT = self._ROT_reasons[self.ROT]
         else:
-            ROT = [self._ROT_reasons[i] for i in self.iROT]
+            ROT = [self._ROT_reasons[i] for i in self.ROT]
             
         direction = self._dir_str[self.dir]
         
@@ -55,7 +55,7 @@ class streamline:
         self.x0 = x0
         
         if(self.dir==1 or self.dir==-1):
-            self.xs, iROT, self.ns = streamtracer.streamline(x0, v, d, xc, 
+            self.xs, ROT, self.ns = streamtracer.streamline(x0, v, d, xc, 
                                                              self.dir, 
                                                              self.ns,
                                                              self.ds)
@@ -63,17 +63,17 @@ class streamline:
             self.xs = self.xs[:self.ns, :]
             
         elif(self.dir==0):
-            xs_f, iROT_f, ns_f = streamtracer.streamline(x0, v, d, xc, 1, 
+            xs_f, ROT_f, ns_f = streamtracer.streamline(x0, v, d, xc, 1, 
                                                          self.ns, self.ds)
-            xs_r, iROT_r, ns_r = streamtracer.streamline(x0, v, d, xc, -1, 
+            xs_r, ROT_r, ns_r = streamtracer.streamline(x0, v, d, xc, -1, 
                                                          self.ns, self.ds)
             
-            self.iROT = np.array([iROT_f, iROT_r])
+            self.ROT = np.array([ROT_f, ROT_r])
             
             self.xs = np.vstack([xs_r[ns_r:0:-1, :], xs_f[:ns_f, :]])
             self.ns = self.xs.shape[0]
             
-            self.iROT = np.array([iROT_f, iROT_r])
+            self.ROT = np.array([ROT_f, ROT_r])
             
         self.s = np.arange(self.ns)*self.ds
         
@@ -134,11 +134,15 @@ class streamline:
         
 #%% Streamline array
 class streamline_array(streamline):
-    def __init__(self, n_steps, step_size, direction=0):
+    def __init__(self, n_steps, step_size, direction=0, inner_boundary=True, r_IB=1.):
         self.ns = n_steps # Number of steps
         self.ns0 = n_steps # Save original number
         self.ds = step_size # Integration step size
         self.dir = direction # Integration direction of streamline
+        
+        streamtracer.inner_boundary = inner_boundary
+        streamtracer.r_IB = 1.
+        
         
         self._ROT_reasons = ['Uncalculated',
                             'Out of steps',
@@ -208,7 +212,7 @@ class streamline_array(streamline):
             
         # Remove streamlines with zero size
         el = self.ns>0
-        self.ROT = self.ROT[el, :]
+        self.ROT = self.ROT[el] #, :
         self.ns = self.ns[el]
         
         for s in self.cell_data:
