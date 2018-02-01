@@ -1,5 +1,5 @@
 import numpy as np
-from magnetosphere.fortran.streamtracer import streamtracer
+from magnetosphere.gorgon.fortran.streamtracer import streamtracer
 from scipy.interpolate import RegularGridInterpolator as interpolate
 import matplotlib.pyplot as plt
 import vtk

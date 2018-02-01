@@ -5,7 +5,7 @@ Created on Wed Sep  6 14:14:46 2017
 @author: Lars
 """
 import numpy as np
-from magnetosphere.streamline import streamline_array
+from magnetosphere.gorgon.streamline import streamline_array
 import vtk
 from vtk.util import numpy_support as vtk_np
 

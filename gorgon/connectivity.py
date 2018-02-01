@@ -1,6 +1,6 @@
 import numpy as np
-from magnetosphere.fortran.connectivity_tracer import connectivity_tracer
-from magnetosphere.fieldlines import fieldlines
+from magnetosphere.gorgon.fortran.connectivity_tracer import connectivity_tracer
+from magnetosphere.gorgon.fieldlines import fieldlines
     
 
 def calc_connectivity(x0, arr, d, xc, ns=10000, ds=None):

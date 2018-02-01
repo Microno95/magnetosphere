@@ -1,4 +1,4 @@
-from magnetosphere.fortran.null_finder import null_finder
+from magnetosphere.gorgon.fortran.null_finder import null_finder
 import numpy as np
 import vtk
 from vtk.util import numpy_support as vtk_np
