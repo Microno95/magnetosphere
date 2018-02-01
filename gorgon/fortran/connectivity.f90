@@ -23,7 +23,7 @@
     
     integer :: ns
     double precision :: ds, r_IB=1.
-	logical :: inner_boundary=.false.
+	logical :: inner_boundary=.false., write_threads=.false.
 	
     contains
     
@@ -36,13 +36,15 @@
     integer :: ROT_f, ROT_r
     integer :: i
 	
-	!$omp parallel
-	!$omp critical
-	open(unit=500, file='connectivity_threads.txt', access='append')
-	write(500,*) omp_get_thread_num(), omp_get_max_threads()
-	close(500)
-	!$omp end critical
-	!$omp end parallel
+	if(write_threads) then
+		!$omp parallel
+		!$omp critical
+		open(unit=500, file='streamtracer_threads.txt', access='append')
+		write(500,*) omp_get_thread_num(), omp_get_max_threads()
+		close(500)
+		!$omp end critical
+		!$omp end parallel
+	end if
     
     !$omp parallel do default(firstprivate) shared(v, x0, link) schedule(dynamic)
     do i=1,nlines
