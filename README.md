@@ -10,6 +10,8 @@ It contains the following functionality:
 * Null point determination (untested), in `gorgon/null_points.py`
 * Empirical Earth Bow shock and Magnetopause models, in `models/bowshock.py` and `models/magnetopause.py`
 
+Examples are in Jupyter Notebooks in the `docs` folder.
+
 ## Fortran subroutines and F2Py
 
 The Fortran source files are contained in `gorgon/fortran/`. This repo contains compiled versions for Windows and Linux, on numpy v1.13.3.
