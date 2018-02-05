@@ -65,3 +65,65 @@ def BS_Jerab05(phi, th, Pd, Ma, B, gamma=5./3):
     m = 1+D*((gamma-1)*Ma**2+2)/((gamma+1)*(Ma**2-1))
 
     return Rav(phi, th)/R0*A*m
+	
+def BS_Merka05(phi, th, n_sw, v_sw, Ma):
+    ''' The Merka et. al 2005 (MA) bow shock model (GPE coordinates)
+    phi: Azimuth from +y toward +z
+    th: colatitude from +x
+    N: SW number density in cm-3
+    v: SW speed in km/s
+    Ma: The Alfven Mach Number
+    '''
+    from numpy import cos, sin
+    
+    # MA dependence
+    b11 = [0.0063, 0.1649]
+    b12 = [-0.0098, 0.0196]
+    b31 = [0.8351, 0.0973]
+    b32 = [0.0102, 0.01]
+    b41 = [-0.0298, 0.0627]
+    b42 = [0.004, 0.0072]
+    b71 = [16.39, 2.94]
+    b72 = [0.2087, 0.228]
+    b73 = [108.3, 43.1]
+    b81 = [-0.9241, 0.5913]
+    b82 = [0.0721, 0.0591]
+    b101 = [-444, 59.2]
+    b102 = [-2.935, 4.834]
+    b103 = [-1930, 618]
+    
+    a1 = b11[0] + b12[0]*Ma
+    a2 = 1.
+    a3 = b31[0] + b32[0]*Ma
+    a4 = b41[0] + b42[0]*Ma
+    a7 = b71[0] + b72[0]*Ma + b73[0]/(Ma-1)**2
+    a8 = b81[0] + b82[0]*Ma
+    a10 = b101[0] + b102[0]*Ma + b103[0]/(Ma-1)**2
+    
+    cos2 = lambda x: cos(x)**2
+    sin2 = lambda x: sin(x)**2
+    
+    A = a1*cos2(th) + sin2(th)*(a2*cos2(phi) + a3*sin2(phi)) + a4*sin(2*th)*cos(phi)
+    
+    B = 2*( a7*cos(th) + a8*sin(th)*cos(phi))
+
+    C = a10
+    
+#     print("th", np.degrees(th))
+#     print("phi", np.degrees(phi))
+    
+#     print("A", A)
+#     print("B", B)
+#     print("C", C)
+    
+    det = B**2-4*A*C
+    if((det<0).any()):
+        print(det)
+
+    r = np.maximum(-B+np.sqrt(det), -B-np.sqrt(det))
+    r = r/(2*A)
+
+    # Scale back 
+    rs = ((n_sw*v_sw**2)/(7*457.5**2))**(1./6)
+    
+    return r*rs
