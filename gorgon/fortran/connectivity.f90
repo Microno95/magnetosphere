@@ -34,6 +34,7 @@
     integer, dimension(nlines), intent(out) :: link
     integer, intent(in) :: nx, ny, nz, nlines
     integer :: ROT_f, ROT_r
+    double precision, dimension(3) :: x0_i
     integer :: i
 	
 	if(write_threads) then
@@ -46,10 +47,11 @@
 		!$omp end parallel
 	end if
     
-    !$omp parallel do default(firstprivate) shared(v, x0, link) schedule(dynamic)
+    !$omp parallel do default(firstprivate) shared(v, x0, link) private(x0_i) schedule(dynamic)
     do i=1,nlines
-        ROT_f = streamline(x0(i,:), v, nx, ny, nz, d, xc, 1)
-        ROT_r = streamline(x0(i,:), v, nx, ny, nz, d, xc, -1)
+        x0_i = x0(i,:)
+        ROT_f = streamline(x0_i, v, nx, ny, nz, d, xc, 1)
+        ROT_r = streamline(x0_i, v, nx, ny, nz, d, xc, -1)
         link(i) = categorise_end_pts(ROT_f, ROT_r)
     end do
 	!$omp end parallel do
@@ -86,7 +88,7 @@
     implicit none
     double precision, dimension(3), intent(in) :: x0, d, xc
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
-    double precision, dimension(3) :: xi
+    double precision, dimension(3) :: xi, xu
     integer, intent(in) :: nx, ny, nz, dir
     integer :: ROT
     double precision, dimension(3) :: k1, k2, k3, k4
@@ -99,28 +101,30 @@
     do i=0,ns-1
 
         !--- RK4 K parameters ---------------------------------------------------------------------
-        call stream_function(xi,        v, nx, ny, nz, d, xc, dir, k1, ROT)
-        k1 = k1*ds
+        call stream_function(xi, v, nx, ny, nz, d, xc, dir, k1, ROT)
 
         if(ROT.ne.0) exit
         
-        call stream_function(xi+0.5*k1, v, nx, ny, nz, d, xc, dir, k2, ROT)
+        xu = xi+0.5*k1
+        call stream_function(xu, v, nx, ny, nz, d, xc, dir, k2, ROT)
+        
         k2 = k2*ds
 
         if(ROT.ne.0) exit
         
-        call stream_function(xi+0.5*k2, v, nx, ny, nz, d, xc, dir, k3, ROT)
-        k3 = k3*ds
+        xu = xi+0.5*k2
+        call stream_function(xu, v, nx, ny, nz, d, xc, dir, k3, ROT)
 
         if(ROT.ne.0) exit
         
-        call stream_function(xi+k3,     v, nx, ny, nz, d, xc, dir, k4, ROT)
-        k4 = k4*ds
+        
+        xu = xi+k3
+        call stream_function(xu, v, nx, ny, nz, d, xc, dir, k4, ROT)
 
         if(ROT.ne.0) exit
 
         !--- Step ---------------------------------------------------------------------------------
-
+        
         xi = xi + (k1 + 2*k2 + 2*k3 + k4)/6.
 
         if ( isnan(xi(1)).or.isnan(xi(2)).or.isnan(xi(3)) ) then
@@ -164,8 +168,9 @@
 	if(vmag.eq.0.) then
 		ROT = -1
 		f = [0., 0., 0.]
-	else
-		f = dir*vI/vmag
+    else
+        
+		f = dir*vI/vmag*ds
     end if
 	
     end subroutine stream_function
@@ -179,10 +184,14 @@
     integer, intent(out) :: ROT
     double precision, dimension(3) :: distI
     integer, dimension(3) :: i0, i1, n
-    
+    double precision, dimension(2,2,2) :: cell
     n = (/nx, ny, nz/)
+    
+    
     i0 = floor((xI + xc)/d)
+    
     i1 = i0+1
+    
     
     distI = (xI + xc)/d-i0
     
@@ -201,9 +210,14 @@
         return
     end if
     
-    call interp_trilinear(distI, v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 1), vI(1))
-    call interp_trilinear(distI, v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 2), vI(2))
-    call interp_trilinear(distI, v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 3), vI(3))
+    cell = v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 1)
+    call interp_trilinear(distI, cell, vI(1))
+    
+    cell = v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 2)
+    call interp_trilinear(distI, cell, vI(2))
+    
+    cell = v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 3)
+    call interp_trilinear(distI, cell, vI(3))
     
     !print*, 'vI: ', vI
     
