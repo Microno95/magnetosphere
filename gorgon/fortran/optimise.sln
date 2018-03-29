@@ -7,18 +7,30 @@ Project("{6989167D-11E4-40FE-8C1A-2192A86A7E90}") = "optimise", "optimise.vfproj
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Advisor|x64 = Advisor|x64
 		Advisor|x86 = Advisor|x86
+		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
+		Release_wDebug_info|x64 = Release_wDebug_info|x64
 		Release_wDebug_info|x86 = Release_wDebug_info|x86
+		Release|x64 = Release|x64
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Advisor|x64.ActiveCfg = Advisor|x64
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Advisor|x64.Build.0 = Advisor|x64
 		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Advisor|x86.ActiveCfg = Advisor|Win32
 		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Advisor|x86.Build.0 = Advisor|Win32
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Debug|x64.ActiveCfg = Debug|x64
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Debug|x64.Build.0 = Debug|x64
 		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Debug|x86.ActiveCfg = Debug|Win32
 		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Debug|x86.Build.0 = Debug|Win32
-		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release_wDebug_info|x86.ActiveCfg = Release_wDebug_info|Win32
-		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release_wDebug_info|x86.Build.0 = Release_wDebug_info|Win32
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release_wDebug_info|x64.ActiveCfg = Release|x64
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release_wDebug_info|x64.Build.0 = Release|x64
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release_wDebug_info|x86.ActiveCfg = Release|Win32
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release_wDebug_info|x86.Build.0 = Release|Win32
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release|x64.ActiveCfg = Release|x64
+		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release|x64.Build.0 = Release|x64
 		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release|x86.ActiveCfg = Release|Win32
 		{BC5BD8B1-8AE0-45D5-BC4F-0DD1B6AADA9D}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection

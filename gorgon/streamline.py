@@ -53,20 +53,23 @@ class streamline:
     def calc(self, x0, v, d, xc):
         
         self.x0 = x0
+        streamtracer.ds = self.ds
+        streamtracer.xc = xc
+
+        x0 += xc
         
         if(self.dir==1 or self.dir==-1):
-            self.xs, ROT, self.ns = streamtracer.streamline(x0, v, d, xc, 
+            self.xs, ROT, self.ns = streamtracer.streamline(x0, v, d,
                                                              self.dir, 
-                                                             self.ns,
-                                                             self.ds)
+                                                             self.ns)
             
             self.xs = self.xs[:self.ns, :]
             
         elif(self.dir==0):
-            xs_f, ROT_f, ns_f = streamtracer.streamline(x0, v, d, xc, 1, 
-                                                         self.ns, self.ds)
-            xs_r, ROT_r, ns_r = streamtracer.streamline(x0, v, d, xc, -1, 
-                                                         self.ns, self.ds)
+            xs_f, ROT_f, ns_f = streamtracer.streamline(x0, v, d, 1, 
+                                                         self.ns)
+            xs_r, ROT_r, ns_r = streamtracer.streamline(x0, v, d, -1, 
+                                                         self.ns)
             
             self.ROT = np.array([ROT_f, ROT_r])
             
@@ -74,6 +77,8 @@ class streamline:
             self.ns = self.xs.shape[0]
             
             self.ROT = np.array([ROT_f, ROT_r])
+
+        self.xs = np.array([xi-xc for xi in self.xs])
             
         self.s = np.arange(self.ns)*self.ds
         
@@ -143,7 +148,6 @@ class streamline_array(streamline):
         streamtracer.inner_boundary = inner_boundary
         streamtracer.r_IB = 1.
         
-        
         self._ROT_reasons = ['Uncalculated',
                             'Out of steps',
                             'Out of domain',
@@ -171,16 +175,19 @@ class streamline_array(streamline):
     
     def calc(self, x0, v, d, xc):
         
-        self.x0 = x0
+        self.x0 = x0.copy()
         self.n_lines = x0.shape[0]
+        streamtracer.ds = self.ds
+        streamtracer.xc = xc.copy()
+
+        self.x0 = np.array([xi+xc for xi in self.x0])
         
         if(self.dir==1 or self.dir==-1):
             # Calculate streamlines
-            self.xs, ROT, self.ns = streamtracer.streamline_array(x0, 
-                                                                   v, d, xc, 
+            self.xs, ROT, self.ns = streamtracer.streamline_array(self.x0, 
+                                                                   v, d, 
                                                                    self.dir, 
-                                                                   self.ns, 
-                                                                   self.ds)
+                                                                   self.ns)
             
             # Reduce the size of the array
             self.xs =np.array([xi[:ni, :] for xi, ni in zip(self.xs, self.ns)])
@@ -190,20 +197,18 @@ class streamline_array(streamline):
             
         elif(self.dir==0):
             # Calculate forward streamline
-            xs_f, ROT_f, ns_f = streamtracer.streamline_array(x0, v, d, xc, 
-                                                               1, 
-                                                               self.ns, 
-                                                               self.ds)
+            xs_f, ROT_f, ns_f = streamtracer.streamline_array(self.x0, v, d, 
+                                                              1, 
+                                                              self.ns)
             # Calculate backward streamline
-            xs_r, ROT_r, ns_r = streamtracer.streamline_array(x0, v, d, xc, 
-                                                               -1, 
-                                                               self.ns, 
-                                                               self.ds)
+            xs_r, ROT_r, ns_r = streamtracer.streamline_array(self.x0, v, d, 
+                                                              -1, 
+                                                              self.ns)
             
             # Reduce the size of the arrays, and flip the reverse streamline
-            xs_f = np.array([xi[:ni, :] for xi, ni in zip(xs_f, ns_f)])
-            xs_r = np.array([xi[ni:1:-1, :] for xi, ni in zip(xs_r, ns_r)])
-            
+            xs_f = np.array([xi[:ni-1, :] for xi, ni in zip(xs_f, ns_f)])
+            xs_r = np.array([xi[ni-1::-1, :] for xi, ni in zip(xs_r, ns_r)])
+
             # Stack the forward and reverse arrays
             self.ns =  ns_f+ns_r-1
             self.xs = np.array([np.vstack([xri, xfi]) for xri, xfi, ns in zip(xs_r, xs_f, self.ns) if ns>0])
@@ -214,9 +219,10 @@ class streamline_array(streamline):
         el = self.ns>0
         self.ROT = self.ROT[el] #, :
         self.ns = self.ns[el]
+
+        self.xs = np.array([xi-xc for xi in self.xs])
         
         for s in self.cell_data:
-            #print(s, self.cell_data[s].shape)
             self.cell_data[s] = self.cell_data[s][el]
         
     
