@@ -39,29 +39,17 @@
     double precision, dimension(ns, 3) :: xs_i
     integer :: ROT_i, ns_i
     integer :: i, j, k
-	
-	!if(write_threads) then
-	!	!$omp parallel
-	!	!$omp critical
-	!	open(unit=500, file='streamtracer_threads.txt', access='append')
-	!	write(500,*) omp_get_thread_num(), omp_get_max_threads()
-	!	close(500)
-	!	!$omp end critical
-	!	!$omp end parallel
-	!end if
     
-	!$omp parallel do default(private) shared(xs,ROT,ns_out, x0) schedule(dynamic)
+    !$omp parallel do default(firstprivate) shared(v, xs, x0, ROT, ns_out) schedule(dynamic)
     do i=1,nlines
+        !DIR$ NOUNROLL
         x0_i = x0(i,:)
-        call streamline(x0_i, v, nx, ny, nz, d, dir, ns, xs_i, ROT_i, ns_i)
-        ROT(i) = ROT_i
-        ns_out(i) = ns_i
-        do j=1,ns_i
+        call streamline(x0_i, v, nx, ny, nz, d, dir, ns, xs_i, ROT(i), ns_out(i))
+        do j=1,ns_out(i)
             xs(i,j,:) = xs_i(j,:)
         end do
-        
     end do
-	!$omp end parallel do
+    !$omp end parallel do
     
     end subroutine streamline_array
 
@@ -105,28 +93,35 @@
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
     integer, dimension(nlines), intent(out) :: link
     integer, intent(in) :: nx, ny, nz, nlines
-    integer :: ROT_f, ROT_r
+    integer, dimension(nlines) :: ROT_f, ROT_r
     double precision, dimension(3) :: x0_i
     integer :: i
-	
-	!if(write_threads) then
-	!	!$omp parallel
-	!	!$omp critical
-	!	open(unit=500, file='streamtracer_threads.txt', access='append')
-	!	write(500,*) omp_get_thread_num(), omp_get_max_threads()
-	!	close(500)
-	!	!$omp end critical
-	!	!$omp end parallel
-	!end if
     
-    !$omp parallel do default(firstprivate) shared(v, x0, link) private(x0_i) schedule(dynamic)
+    !$omp parallel default(firstprivate) shared(v, x0, ROT_f, ROT_r, link)
+    
+    !$omp do schedule(dynamic)
     do i=1,nlines
+        !DIR$ NOUNROLL
         x0_i = x0(i,:)
-        ROT_f = streamline_end(x0_i, v, nx, ny, nz, d, 1)
-        ROT_r = streamline_end(x0_i, v, nx, ny, nz, d, -1)
-        link(i) = categorise_end_pts(ROT_f, ROT_r)
+        ROT_f(i) = streamline_end(x0_i, v, nx, ny, nz, d, 1)
     end do
-	!$omp end parallel do
+    !$omp end do
+    
+    !$omp do schedule(dynamic)
+    do i=1,nlines
+        !DIR$ NOUNROLL
+        x0_i = x0(i,:)
+        ROT_r(i) = streamline_end(x0_i, v, nx, ny, nz, d, -1)
+    end do
+    !$omp end do
+    
+    !$omp do schedule(static)
+    do i=1,nlines
+        link(i) = categorise_end_pts(ROT_f(i), ROT_r(i))
+    end do
+    !$omp end do
+    
+    !$omp end parallel
     
     end subroutine connectivity_array
  
@@ -194,18 +189,22 @@
 
     !--- RK4 K parameters ---------------------------------------------------------------------
     call stream_function(xi, v, nx, ny, nz, d, dir, k1)
-        
+    
+    !DIR$ NOUNROLL
     xu = xi+0.5*k1
     call stream_function(xu, v, nx, ny, nz, d, dir, k2)
-        
+     
+    !DIR$ NOUNROLL   
     xu = xi+0.5*k2
     call stream_function(xu, v, nx, ny, nz, d, dir, k3)
-        
+       
+    !DIR$ NOUNROLL 
     xu = xi+k3
     call stream_function(xu, v, nx, ny, nz, d, dir, k4)
 
     !--- Step ---------------------------------------------------------------------------------
-        
+      
+    !DIR$ NOUNROLL  
     xi = xi + (k1 + 2*k2 + 2*k3 + k4)/6.
     
     end subroutine RK4_update
@@ -237,7 +236,6 @@
         return
     end if
     
-    
     if(inner_boundary) then
         ri = sqrt((xi(1)-xc(1))**2+(xi(2)-xc(2))**2+(xi(3)-xc(3))**2)
         if(ri.le.r_IB) then
@@ -247,7 +245,7 @@
     end if
     
     end function check_bounds
-
+    
     subroutine stream_function(xI, v, nx, ny, nz, d, dir, f)
     implicit none
     double precision, dimension(3), intent(in) :: xI
@@ -257,33 +255,20 @@
     integer, intent(in) :: dir
     double precision, dimension(3), intent(out) :: f
     double precision :: vmag
-    double precision, dimension(3) :: vI
-    
-    call interpolate(xI, v, nx, ny, nz, d, vI)
-    
-	vmag  = sqrt(vI(1)**2+vI(2)**2+vI(3)**2)
-    f = dir*vI/vmag*ds
-	
-    end subroutine stream_function
-    
-    subroutine interpolate(xI, v, nx, ny, nz, d, vI)
-    double precision, intent(in), dimension(3) :: xI
-    double precision, intent(in), dimension(nx,ny,nz,3) :: v
-    integer, intent(in) :: nx, ny, nz
-    double precision, intent(in), dimension(3) :: d
-    double precision, intent(out), dimension(3) :: vI
-    double precision, dimension(3) :: distI
+    double precision, dimension(3) :: vI, distI
     integer, dimension(3) :: i0, i1
     double precision, dimension(2,2,2) :: cell
     
-    i0 = floor(xI/d)
+    !DIR$ NOUNROLL
+    i0 = floor(xI/d)+1
     i0(1) = min(max(1,i0(1)), nx-1)
     i0(2) = min(max(1,i0(2)), ny-1)
     i0(3) = min(max(1,i0(3)), nz-1)
     
     i1 = i0+1
     
-    distI = xI/d-i0
+    !DIR$ NOUNROLL
+    distI = xI/d+1-i0
     
     cell = v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 1)
     call interp_trilinear(distI, cell, vI(1))
@@ -294,8 +279,29 @@
     cell = v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 3)
     call interp_trilinear(distI, cell, vI(3))
     
-    end subroutine interpolate
+    !call interp_trilinear2(distI, v(i0(1),i0(2),i0(3),1), v(i0(1),i0(2),i1(3),1), &
+    !                              v(i0(1),i1(2),i0(3),1), v(i0(1),i1(2),i1(3),1), &
+    !                              v(i1(1),i0(2),i0(3),1), v(i1(1),i0(2),i1(3),1), &
+    !                              v(i1(1),i1(2),i0(3),1), v(i1(1),i1(2),i1(3),1), &
+    !                              vI(1))
+    !
+    !call interp_trilinear2(distI, v(i0(1),i0(2),i0(3),2), v(i0(1),i0(2),i1(3),2), &
+    !                              v(i0(1),i1(2),i0(3),2), v(i0(1),i1(2),i1(3),2), &
+    !                              v(i1(1),i0(2),i0(3),2), v(i1(1),i0(2),i1(3),2), &
+    !                              v(i1(1),i1(2),i0(3),2), v(i1(1),i1(2),i1(3),2), &
+    !                              vI(2))
+    !
+    !call interp_trilinear2(distI, v(i0(1),i0(2),i0(3),3), v(i0(1),i0(2),i1(3),3), &
+    !                              v(i0(1),i1(2),i0(3),3), v(i0(1),i1(2),i1(3),3), &
+    !                              v(i1(1),i0(2),i0(3),3), v(i1(1),i0(2),i1(3),3), &
+    !                              v(i1(1),i1(2),i0(3),3), v(i1(1),i1(2),i1(3),3), &
+    !                              vI(3))
     
+	vmag  = sqrt(vI(1)**2+vI(2)**2+vI(3)**2)
+    !DIR$ NOUNROLL
+    f = dir*vI/vmag*ds
+	
+    end subroutine stream_function   
 
     !--- Trilinear interpolation function -------------------------------------------------------------
 
@@ -308,6 +314,7 @@
     double precision, dimension(3) :: m_xd
     double precision :: c0, c1
     
+    !DIR$ NOUNROLL
     m_xd = 1-xd
 
     !--- Interpolate over x -----------------------------------------------------------------------
@@ -327,5 +334,34 @@
     fI = c0*m_xd(3) + c1*xd(3)
 
     end subroutine interp_trilinear
+
+    subroutine interp_trilinear2(xd, f000, f001, f010, f011, f100, f101, f110, f111, fI)
+    implicit none
+    double precision, intent(in), dimension(3) :: xd
+    double precision, intent(in) :: f000, f001, f010, f011, f100, f101, f110, f111
+    double precision, intent(out) :: fI
+    double precision :: c00, c10, c01, c11, c0, c1
+    double precision, dimension(3) :: m_xd
+    
+    !DIR$ NOUNROLL    
+    m_xd = 1-xd
+
+    !--- Interpolate over x -----------------------------------------------------------------------
+
+    c00 = f000*m_xd(1) + f100*xd(1)
+    c01 = f001*m_xd(1) + f101*xd(1)
+    c10 = f010*m_xd(1) + f110*xd(1)
+    c11 = f011*m_xd(1) + f111*xd(1)
+
+    !--- Interpolate over y -----------------------------------------------------------------------
+
+    c0 = c00*m_xd(2) + c10*xd(2)
+    c1 = c01*m_xd(2) + c11*xd(2)
+
+    !--- Interpolate over z -----------------------------------------------------------------------
+
+    fI = c0*m_xd(3) + c1*xd(3)
+
+    end subroutine interp_trilinear2
 
     end module streamtracer

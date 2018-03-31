@@ -5,6 +5,7 @@
 *.vti
 *.pvti
 *.vtp
+*.u2d
 
 ## For Intel Advisor / Amplifier
 My * Results - optimise/
