@@ -13,8 +13,6 @@ class fieldlines(streamline_array):
     def __init__(self, n_steps, step_size):
         
         streamline_array.__init__(self, n_steps, step_size, direction=0)
-        
-        
     
     def calc_linkage(self, sim):
         
