@@ -24,6 +24,7 @@ class streamline:
                          1: 'Forward'}
         
         self.var = {}
+        self.var_names = []
         self.cell_data = {}
         
         # Preallocate some arrays
@@ -157,6 +158,7 @@ class streamline_array(streamline):
                          1: 'Forward'}
         
         self.var = {}
+        self.var_names = []
         self.cell_data = {}
         
     def reset(self, ns=None, ds=None):
@@ -173,7 +175,7 @@ class streamline_array(streamline):
     
     # Calculate the streamline from a vector array
     
-    def calc(self, x0, v, d, xc):
+    def calc(self, x0, v, d, xc, v_name='v', n_threads=1):
         
         self.x0 = x0.copy()
         self.n_lines = x0.shape[0]
@@ -184,43 +186,52 @@ class streamline_array(streamline):
         
         if(self.dir==1 or self.dir==-1):
             # Calculate streamlines
-            self.xs, ROT, self.ns = streamtracer.streamline_array(self.x0, 
+            self.xs, vs, ROT, self.ns = streamtracer.streamline_array(self.x0, 
                                                                    v, d, 
                                                                    self.dir, 
-                                                                   self.ns)
+                                                                   self.ns, n_threads)
             
             # Reduce the size of the array
             self.xs =np.array([xi[:ni, :] for xi, ni in zip(self.xs, self.ns)])
+            vs = np.array([vi[:ni, :] for vi, ni in zip(vs, self.ns)])
             
             # Save the Reason of Termination
             self.ROT = ROT
             
         elif(self.dir==0):
             # Calculate forward streamline
-            xs_f, ROT_f, ns_f = streamtracer.streamline_array(self.x0, v, d, 
+            xs_f, vs_f, ROT_f, ns_f = streamtracer.streamline_array(self.x0, v, d, 
                                                               1, 
-                                                              self.ns)
+                                                              self.ns, n_threads)
             # Calculate backward streamline
-            xs_r, ROT_r, ns_r = streamtracer.streamline_array(self.x0, v, d, 
+            xs_r, vs_r, ROT_r, ns_r = streamtracer.streamline_array(self.x0, v, d, 
                                                               -1, 
-                                                              self.ns)
+                                                              self.ns, n_threads)
             
-            # Reduce the size of the arrays, and flip the reverse streamline
-            xs_f = np.array([xi[:ni-1, :] for xi, ni in zip(xs_f, ns_f)])
-            xs_r = np.array([xi[ni-1::-1, :] for xi, ni in zip(xs_r, ns_r)])
+            # Reduce the size of the arrays, and flip the reverse streamlines
+            xs_f = np.array([xi[:ni, :] for xi, ni in zip(xs_f, ns_f)])
+            vs_f = np.array([vi[:ni, :] for vi, ni in zip(vs_f, ns_f)])
+            
+            xs_r = np.array([xi[ni-1:0:-1, :] for xi, ni in zip(xs_r, ns_r)])
+            vs_r = np.array([vi[ni-1:0:-1, :] for vi, ni in zip(vs_r, ns_r)])
 
             # Stack the forward and reverse arrays
-            self.ns =  ns_f+ns_r-1
-            self.xs = np.array([np.vstack([xri, xfi]) for xri, xfi, ns in zip(xs_r, xs_f, self.ns) if ns>0])
+            self.xs = np.array([np.vstack([xri, xfi]) for xri, xfi in zip(xs_r, xs_f)])
+            vs = np.array([np.vstack([vri, vfi]) for vri, vfi in zip(vs_r, vs_f)])
+            self.ns = np.fromiter([len(xsi) for xsi in self.xs], int)
             
             self.ROT = np.vstack([ROT_f, ROT_r]).T
             
         # Remove streamlines with zero size
-        el = self.ns>0
+        el = self.ns>1
         self.ROT = self.ROT[el] #, :
         self.ns = self.ns[el]
 
         self.xs = np.array([xi-xc for xi in self.xs])
+        
+        self.var[v_name] = vs.copy()
+        self.var_names = np.array([s for s in self.var])
+        del vs
         
         for s in self.cell_data:
             self.cell_data[s] = self.cell_data[s][el]
@@ -242,7 +253,7 @@ class streamline_array(streamline):
             
     def _interp_scalar(self, x, y, z, f):
         
-        I = interpolate((x, y, z), f,)# bounds_error=False)
+        I = interpolate((x, y, z), f, bounds_error=False)
 
         xI = np.vstack(self.xs)
         fI = I(xI)
@@ -253,9 +264,9 @@ class streamline_array(streamline):
     
     def _interp_vector(self, x, y, z, v):
         
-        Ix = interpolate((x, y, z), v[:,:,:,0])#, bounds_error=False)
-        Iy = interpolate((x, y, z), v[:,:,:,1])#, bounds_error=False)
-        Iz = interpolate((x, y, z), v[:,:,:,2])#, bounds_error=False)
+        Ix = interpolate((x, y, z), v[:,:,:,0], bounds_error=False, fill_value=None)
+        Iy = interpolate((x, y, z), v[:,:,:,1], bounds_error=False, fill_value=None)
+        Iz = interpolate((x, y, z), v[:,:,:,2], bounds_error=False, fill_value=None)
 
         xI = np.vstack(self.xs)
         vI = np.array([Ix(xI), Iy(xI), Iz(xI)]).T
@@ -284,7 +295,7 @@ class streamline_array(streamline):
                                  colspan=2, projection='3d')
         
         self.plot3D(ax_3D, i)
-        ax_3D.plot([self.xs[i][0,0]], [self.xs[i][0,1]], [self.xs[i][0,2]], '.')
+        ax_3D.plot([self.xs[i][0,0]], [self.xs[i][0,1]], [self.xs[i][0,2]])
         
         self.plot_linevars(i, ax=ax_line)
         
@@ -307,7 +318,7 @@ class streamline_array(streamline):
             ret = True
             
         s = np.linspace(0, 1, self.ns[i])*self.ns[i]*self.ds
-        
+		
         ax[0].plot(s, self.xs[i])
         mag = np.sqrt(np.sum(self.xs[i]**2, axis=1))
         ax[0].plot(s, mag)

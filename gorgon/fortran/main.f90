@@ -1,3 +1,4 @@
+	include 'Streamtracer.f90'
     program main
     use streamtracer
     implicit none

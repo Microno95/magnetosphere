@@ -24,41 +24,62 @@
     integer :: ns
     double precision :: ds, r_IB=1.
     double precision, dimension(3) :: xc
-	logical :: inner_boundary=.false., write_threads=.false.
-	
+    logical :: inner_boundary=.false.
+    
     contains
-        
-    subroutine streamline_array(x0, nlines, v, nx, ny, nz, d, dir, ns, xs, ROT, ns_out)
+    
+    subroutine thread_count
+    
+    open(unit=500, file='threads.txt', access='append')
+    write(500,*) omp_get_thread_num(), omp_get_max_threads()
+    close(500)
+    
+    write(*,*) omp_get_thread_num(), omp_get_max_threads()
+    
+    end subroutine thread_count
+    
+    subroutine streamline_array(x0, nlines, v, nx, ny, nz, d, dir, ns, xs, vs, ROT, ns_out, n_threads)
     double precision, dimension(nlines,3), intent(in) :: x0
     double precision, dimension(3), intent(in) :: d
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
-    integer, intent(in) :: ns, nx, ny, nz, dir, nlines
-    double precision, dimension(nlines, ns, 3), intent(out) :: xs
+    integer, intent(in) :: ns, nx, ny, nz, dir, nlines, n_threads
+    double precision, dimension(nlines, ns, 3), intent(out) :: xs, vs
     integer, intent(out), dimension(nlines) :: ROT, ns_out
     double precision, dimension(3) :: x0_i
-    double precision, dimension(ns, 3) :: xs_i
+    double precision, dimension(ns, 3) :: xs_i, vs_i
     integer :: ROT_i, ns_i
     integer :: i, j, k
+	
+	call omp_set_num_threads(n_threads)
+	
+    !$omp parallel default(firstprivate) shared(v, xs, vs, x0, ROT, ns_out)
+	
+	!$omp critical
+	call thread_count()
+	!$omp end critical
     
-    !$omp parallel do default(firstprivate) shared(v, xs, x0, ROT, ns_out) schedule(dynamic)
+    !$omp do schedule(dynamic)
     do i=1,nlines
         !DIR$ NOUNROLL
         x0_i = x0(i,:)
-        call streamline(x0_i, v, nx, ny, nz, d, dir, ns, xs_i, ROT(i), ns_out(i))
+        call streamline(x0_i, v, nx, ny, nz, d, dir, ns, xs_i, vs_i, ROT(i), ns_out(i))
         do j=1,ns_out(i)
             xs(i,j,:) = xs_i(j,:)
+            vs(i,j,:) = vs_i(j,:)
         end do
     end do
-    !$omp end parallel do
+	!$omp end do
+	
+    !$omp end parallel
     
     end subroutine streamline_array
 
-    subroutine streamline(x0, v, nx, ny, nz, d, dir, ns_in, xs, ROT, ns_out)
+    subroutine streamline(x0, v, nx, ny, nz, d, dir, ns_in, xs, vs, ROT, ns_out)
     implicit none
     double precision, dimension(3), intent(in) :: x0, d
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
     integer, intent(in) :: ns_in, nx, ny, nz, dir
-    double precision, dimension(ns_in, 3), intent(out) :: xs
+    double precision, dimension(ns_in, 3), intent(out) :: xs, vs
     integer, intent(out) :: ROT, ns_out
     double precision, dimension(3) :: xi
     integer :: i
@@ -70,7 +91,11 @@
     xs = 0
     xs(1, :) = x0
     xi = x0
-
+    
+    vs = 1.
+    
+    call interpolate(xi, v, nx, ny, nz, d, vs(1,:))
+    
     do i=2,ns
         
         ROT = check_bounds(xi, nx, ny, nz, d)
@@ -80,24 +105,36 @@
         
         xs(i,:) = xi
         
+        call interpolate(xi, v, nx, ny, nz, d, vs(i,:))
+        
     end do
-
-    if (ROT.eq.0) ROT = 1
+    
     ns_out = i-1
+
+    if (ROT.eq.0) then
+		ROT = 1
+		ns_out = ns
+	end if
     
     end subroutine streamline
     
-    subroutine connectivity_array(x0, nlines, v, nx, ny, nz, d, link)
+    subroutine connectivity_array(x0, nlines, v, nx, ny, nz, d, link, n_threads)
     double precision, dimension(nlines,3), intent(in) :: x0
     double precision, dimension(3), intent(in) :: d
     double precision, dimension(nx,ny,nz,3), intent(in) :: v
     integer, dimension(nlines), intent(out) :: link
-    integer, intent(in) :: nx, ny, nz, nlines
+    integer, intent(in) :: nx, ny, nz, nlines, n_threads
     integer, dimension(nlines) :: ROT_f, ROT_r
     double precision, dimension(3) :: x0_i
     integer :: i
+	
+	call omp_set_num_threads(n_threads)
     
     !$omp parallel default(firstprivate) shared(v, x0, ROT_f, ROT_r, link)
+	
+	!$omp critical
+	call thread_count()
+	!$omp end critical
     
     !$omp do schedule(dynamic)
     do i=1,nlines
@@ -302,6 +339,39 @@
     f = dir*vI/vmag*ds
 	
     end subroutine stream_function   
+    
+    subroutine interpolate(xI, v, nx, ny, nz, d, vI)
+    implicit none
+    double precision, dimension(3), intent(in) :: xI
+    double precision, dimension(nx, ny, nz, 3), intent(in) :: v
+    integer, intent(in) :: nx, ny, nz
+    double precision, dimension(3), intent(in) :: d
+    double precision, dimension(3), intent(out) :: vI
+    double precision, dimension(3) :: distI
+    integer, dimension(3) :: i0, i1
+    double precision, dimension(2,2,2) :: cell
+    
+    !DIR$ NOUNROLL
+    i0 = floor(xI/d)+1
+    i0(1) = min(max(1,i0(1)), nx-1)
+    i0(2) = min(max(1,i0(2)), ny-1)
+    i0(3) = min(max(1,i0(3)), nz-1)
+    
+    i1 = i0+1
+    
+    !DIR$ NOUNROLL
+    distI = xI/d+1-i0
+    
+    cell = v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 1)
+    call interp_trilinear(distI, cell, vI(1))
+    
+    cell = v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 2)
+    call interp_trilinear(distI, cell, vI(2))
+    
+    cell = v(i0(1):i1(1), i0(2):i1(2), i0(3):i1(3), 3)
+    call interp_trilinear(distI, cell, vI(3))
+	
+    end subroutine interpolate   
 
     !--- Trilinear interpolation function -------------------------------------------------------------
 
