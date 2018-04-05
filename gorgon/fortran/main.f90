@@ -7,7 +7,7 @@
     double precision, dimension(3) :: d
     double precision, dimension(:, :), allocatable :: x0
     double precision, dimension(:,:,:,:), allocatable :: vec
-    double precision, dimension(:,:,:), allocatable :: xs
+    double precision, dimension(:,:,:), allocatable :: xs, vs
     integer, dimension(:,:,:), allocatable :: link
     double precision  :: x, y, z, r
     integer, dimension(:), allocatable ::  ROT, ns_out
@@ -23,7 +23,7 @@
     
     nlines = nx*ny*nz/n_step**3
     
-    allocate(vec(nx,ny,nz,3), link(nx,ny,nz), x0(nlines,3), xs(nlines, ns, 3))
+    allocate(vec(nx,ny,nz,3), link(nx,ny,nz), x0(nlines,3), xs(nlines, ns, 3), vs(nlines, ns, 3))
     allocate(ROT(nlines), ns_out(nlines))
     
     il = 0
@@ -60,9 +60,9 @@
     
     ds = 0.1*d(1)
     inner_boundary=.true.
-    call connectivity_array(x0, nlines, vec, nx, ny, nz, d, link)
+    call connectivity_array(x0, nlines, vec, nx, ny, nz, d, link, 8)
     
     !print*,'Streamtracer', nlines
-    call streamline_array(x0, nlines, vec, nx, ny, nz, d, 1, ns, xs, ROT, ns_out)
+    call streamline_array(x0, nlines, vec, nx, ny, nz, d, 1, ns, xs, vs, ROT, ns_out, 8)
     
     end program main
